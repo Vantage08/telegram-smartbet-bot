@@ -1,35 +1,44 @@
-import logging
 import requests
-from telegram.ext import Updater, MessageHandler, Filters
+import time
+import telebot
 
-# --- CONFIG ---
-TELEGRAM_BOT_TOKEN = "8273880607:AAFweDIU9Zg_9fNh5xClotgFgFy0j0Y5WLI"
-SMARTBET_KEY = "bcbwb-d634c140-f1b6-4a41-bd27-c6f18f77e2b7"  # from SmartBet dashboard
+# === CONFIGURATION ===
+BOT_TOKEN = "8273880607:AAFweDIU9Zg_9fNh5xClotgFgFy0j0Y5WLI"  # your Telegram bot token
+SMARTBET_KEY = "bcbwb-d634c140-f1b6-4a41-bd27-c6f18f77e2b7"    # your SmartBet.io Bot ID
+SMARTBET_URL = "https://smartbet.io/postpick.php"               # main SmartBet endpoint
+TELEGRAM_CHAT_ID = "7827479245"  # Optional if you want to receive confirmation messages
 
-# --- Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+bot = telebot.TeleBot(BOT_TOKEN)
 
-def handle_message(update, context):
-    text = update.message.text
-    chat_id = update.effective_chat.id
-    logger.info(f"Received: {text}")
-
-    # Forward message to SmartBet
-    url = f"https://smartbet.io/pick.php?key={SMARTBET_KEY}&pick={text}"
+# === FUNCTION TO PLACE BET ===
+def place_bet_on_smartbet(pick_text):
     try:
-        r = requests.get(url, timeout=10)
-        update.message.reply_text(f"SmartBet Response: {r.text}")
+        payload = {"key": SMARTBET_KEY, "pick": pick_text}
+        response = requests.get(SMARTBET_URL, params=payload, timeout=10)
+        if response.status_code == 200:
+            print(f"✅ Bet sent successfully: {pick_text}")
+            return True
+        else:
+            print(f"⚠️ SmartBet API error {response.status_code}: {response.text}")
+            return False
     except Exception as e:
-        update.message.reply_text(f"Error: {str(e)}")
+        print(f"❌ Error sending pick: {e}")
+        return False
 
-def main():
-    updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
-    updater.start_polling()
-    updater.idle()
+# === TELEGRAM MESSAGE HANDLER ===
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    pick_text = message.text.strip()
+    success = place_bet_on_smartbet(pick_text)
+    if TELEGRAM_CHAT_ID and success:
+        bot.send_message(TELEGRAM_CHAT_ID, f"✅ Bet placed: {pick_text}")
 
-if __name__ == '__main__':
-    main()
+# === RUN BOT ===
+print("🤖 Telegram-SmartBet Bot running...")
+while True:
+    try:
+        bot.polling(none_stop=True)
+    except Exception as e:
+        print(f"Bot error: {e}")
+        time.sleep(10)
